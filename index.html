@@ -99,6 +99,21 @@ footer{padding:24px 0 8px;text-align:center;color:#7888a5;font-size:12px}
       <div class="msg bot"><small>NOVA</small>Chào bạn! Mình có thể giới thiệu các tổ hợp trong bản demo và giúp bạn bắt đầu tìm hiểu sở thích. Bạn đang quan tâm ngành nào?</div>
     </div>
     <div class="chat-input"><input class="field" id="chatInput" placeholder="Nhập câu hỏi..." onkeydown="if(event.key==='Enter')sendChat()"><button class="iconbtn" id="micBtn" onclick="voiceInput()" title="Nhập bằng giọng nói">🎙</button><button class="btn" onclick="sendChat()">Gửi</button></div>
+    
+<div id="speechPreview" style="
+  display:none;
+  margin-top:10px;
+  padding:12px;
+  border:1px solid #344866;
+  border-radius:12px;
+  background:#0c1324;
+">
+  <div style="font-size:12px;color:#67e8f9;margin-bottom:6px">
+    Lời nói được nhận dạng
+  </div>
+  <div id="speechText" style="white-space:pre-wrap;overflow-wrap:anywhere"></div>
+</div>
+
     <div class="hint" id="voiceHint">Giọng nói dùng tính năng nhận dạng của trình duyệt nếu được hỗ trợ.</div>
   </div>
 </section>
@@ -266,57 +281,107 @@ function resetAdvisor(){
  subjects.forEach(s=>{const slider=document.querySelector(`#rating-${s.id}`);slider.value=3;document.querySelector(`#value-${s.id}`).textContent='3/5'});
  document.querySelector('#result').classList.remove('show');
 }
-async function voiceInput(){
- const hint=document.querySelector('#voiceHint');
- const micBtn=document.querySelector('#micBtn');
- const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 
- if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-   hint.textContent='Trang chưa được mở trong môi trường cho phép dùng micro. Hãy dùng HTTPS hoặc localhost rồi thử lại.';
-   return;
- }
- if(!SpeechRecognition){
-   hint.textContent='Trình duyệt chưa hỗ trợ nhận dạng giọng nói. Hãy thử Chrome/Edge hoặc nhập câu hỏi bằng bàn phím.';
-   return;
- }
+async function voiceInput() {
+  const hint = document.querySelector('#voiceHint');
+  const micBtn = document.querySelector('#micBtn');
+  const input = document.querySelector('#chatInput');
+  const preview = document.querySelector('#speechPreview');
+  const speechText = document.querySelector('#speechText');
 
- micBtn.disabled=true;
- hint.textContent='Đang yêu cầu quyền sử dụng micro...';
- try{
-   // Xin quyền micro rõ ràng; dừng stream vì SpeechRecognition sẽ tự tiếp nhận âm thanh.
-   const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-   stream.getTracks().forEach(track=>track.stop());
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
-   const r=new SpeechRecognition();
-   r.lang='vi-VN';
-   r.interimResults=false;
-   r.maxAlternatives=1;
-   r.onstart=()=>{hint.textContent='Đang nghe... Hãy nói rõ câu hỏi.'};
-   r.onresult=e=>{
-     document.querySelector('#chatInput').value=e.results[0][0].transcript;
-     hint.textContent='Đã nhận dạng giọng nói.';
-     sendChat();
-   };
-   r.onerror=e=>{
-     if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-       hint.textContent='Micro bị chặn. Bấm biểu tượng cài đặt/ổ khóa cạnh thanh địa chỉ, đặt Micro thành Cho phép rồi tải lại trang.';
-     }else{
-       hint.textContent='Không nhận được giọng nói ('+e.error+'). Kiểm tra thiết bị micro và thử lại.';
-     }
-   };
-   r.onend=()=>{micBtn.disabled=false};
-   r.start();
- }catch(error){
-   if(error && (error.name==='NotAllowedError'||error.name==='PermissionDeniedError')){
-     hint.textContent='Bạn chưa cấp quyền micro. Mở cài đặt trang cạnh thanh địa chỉ, cho phép Micro rồi thử lại.';
-   }else if(error && error.name==='NotFoundError'){
-     hint.textContent='Không tìm thấy micro. Hãy kết nối micro hoặc chọn đúng thiết bị đầu vào âm thanh.';
-   }else{
-     hint.textContent='Không mở được micro. Hãy dùng HTTPS hoặc localhost và kiểm tra cài đặt micro của trình duyệt.';
-   }
-   micBtn.disabled=false;
- }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    hint.textContent = 'Hãy mở website bằng HTTPS và cho phép sử dụng micro.';
+    return;
+  }
+
+  if (!SpeechRecognition) {
+    hint.textContent = 'Trình duyệt chưa hỗ trợ nhận dạng giọng nói. Hãy thử Chrome hoặc Edge.';
+    return;
+  }
+
+  micBtn.disabled = true;
+  preview.style.display = 'block';
+  speechText.textContent = '';
+  hint.textContent = 'Đang yêu cầu quyền sử dụng micro...';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(track => track.stop());
+
+    const recognition = new SpeechRecognition();
+    let finalText = '';
+
+    recognition.lang = 'vi-VN';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      hint.textContent = 'Đang nghe... Hãy nói câu hỏi của bạn.';
+    };
+
+    recognition.onresult = event => {
+      let interimText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+
+        if (event.results[i].isFinal) {
+          finalText += transcript + ' ';
+        } else {
+          interimText += transcript;
+        }
+      }
+
+      const currentText = (finalText + interimText).trim();
+
+      // Hiện chữ ngay khi đang nói
+      speechText.textContent = currentText;
+
+      // Giữ nội dung trong ô nhập để có thể chỉnh sửa trước khi gửi
+      input.value = currentText;
+
+      hint.textContent = interimText
+        ? 'Đang nhận dạng giọng nói...'
+        : 'Đã nhận dạng được nội dung. Bạn có thể nhấn Gửi.';
+    };
+
+    recognition.onerror = event => {
+      if (event.error === 'not-allowed' ||
+          event.error === 'service-not-allowed') {
+        hint.textContent = 'Micro bị chặn. Hãy cho phép Micro trong cài đặt trình duyệt.';
+      } else if (event.error !== 'no-speech' &&
+                 event.error !== 'aborted') {
+        hint.textContent = 'Lỗi nhận dạng giọng nói: ' + event.error;
+      }
+    };
+
+    recognition.onend = () => {
+      micBtn.disabled = false;
+
+      if (input.value.trim()) {
+        hint.textContent = 'Đã dừng nghe. Kiểm tra nội dung rồi nhấn Gửi.';
+      } else {
+        hint.textContent = 'Chưa nhận dạng được lời nói. Nhấn micro để thử lại.';
+      }
+    };
+
+    recognition.start();
+  } catch (error) {
+    micBtn.disabled = false;
+
+    if (error.name === 'NotAllowedError' ||
+        error.name === 'PermissionDeniedError') {
+      hint.textContent = 'Bạn chưa cấp quyền micro. Hãy cho phép trong cài đặt trình duyệt.';
+    } else {
+      hint.textContent = 'Không mở được micro. Hãy kiểm tra thiết bị và quyền truy cập.';
+    }
+  }
 }
+
 </script>
 </body>
 </html>
