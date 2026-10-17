@@ -230,11 +230,6 @@ async function sendChat(){
 
   addMessage('user', q);
 
-  // Dừng mic ngay khi bấm Gửi
-  if (currentRecognition) {
-    currentRecognition.stop();
-    currentRecognition = null;
-  }
 
  try{
    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q})});
