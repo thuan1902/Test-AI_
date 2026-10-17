@@ -210,70 +210,16 @@ function addMessage(role, text) {
   }
 }
 
-async function sendChat() {
+async function sendChat(){
+ 
   const input = document.querySelector('#chatInput');
   const q = input.value.trim();
-
   if (!q) return;
 
-  // Dừng mic khi nhấn Gửi
-  if (currentRecognition) {
-    try {
-      currentRecognition.abort();
-    } catch (error) {
-      console.log("Không thể dừng mic:", error);
-    }
-  }
-
-  input.value = '';
-
-  const preview = document.querySelector('#speechPreview');
-  const speechText = document.querySelector('#speechText');
-
-  if (preview) preview.style.display = 'none';
-  if (speechText) speechText.textContent = '';
-
-  const hint = document.querySelector('#voiceHint');
-  if (hint) {
-    hint.textContent = 'Đã gửi câu hỏi. Bạn có thể nhập hoặc nói câu hỏi mới.';
-  }
-
-  addMessage('user', q);
-
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: q })
-    });
-
-    if (!response.ok) throw new Error('AI server unavailable');
-
-    const data = await response.json();
-    addMessage('bot', data.answer || 'Máy chủ chưa trả lời.');
-  } catch (error) {
-    console.error(error);
-    addMessage('bot', 'Không thể kết nối máy chủ AI. Vui lòng thử lại.');
-  }
-}
-
-
- try{
-   const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:q})});
-   if(!response.ok)throw new Error('AI server unavailable');
-   const data=await response.json();addMessage('bot',data.answer||'Máy chủ chưa trả lời.');
- }catch(error){
-   const s=q.toLowerCase();let answer='';
-   if(/th01|tổ hợp 1/.test(s))answer=`TH01 gồm ${combos.TH01.subjects.join(', ')}. Nhóm ngành tham khảo: ${combos.TH01.fields}.`;
-   else if(/th02|tổ hợp 2/.test(s))answer=`TH02 gồm ${combos.TH02.subjects.join(', ')}. Nhóm ngành tham khảo: ${combos.TH02.fields}.`;
-   else if(/th03|tổ hợp 3/.test(s))answer=`TH03 gồm ${combos.TH03.subjects.join(', ')}. Nhóm ngành tham khảo: ${combos.TH03.fields}.`;
-   else if(/xin chào|chào bạn|hello/.test(s))answer='Chào bạn! Mình là Nova. Bản hiện tại chưa kết nối máy chủ AI nên chỉ trả lời một số câu hỏi mẫu.';
-   else answer='Chat AI chưa hoạt động vì máy chủ Python chưa chạy hoặc chưa cấu hình API. Bạn vẫn có thể dùng phần đánh giá từng môn để thử giao diện.';
-   addMessage('bot',answer);
- }
-}
-
+  
 let autoSpeak = false;
+let isBotSpeaking = false;
+let currentRecognition = null;
 
 function speakText(text) {
   if (!("speechSynthesis" in window)) {
@@ -282,6 +228,44 @@ function speakText(text) {
     return;
   }
 
+  // Đánh dấu Nova đang phát âm thanh
+  isBotSpeaking = true;
+
+  // Dừng mic nếu đang nghe
+  if (currentRecognition) {
+    try {
+      currentRecognition.abort();
+    } catch (error) {}
+
+    currentRecognition = null;
+  }
+
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "vi-VN";
+  utterance.rate = 1;
+  utterance.pitch = 1;
+
+  const voices = window.speechSynthesis.getVoices();
+  const vietnameseVoice = voices.find(
+    voice => voice.lang.toLowerCase().startsWith("vi")
+  );
+
+  if (vietnameseVoice) {
+    utterance.voice = vietnameseVoice;
+  }
+
+  utterance.onend = () => {
+    isBotSpeaking = false;
+  };
+
+  utterance.onerror = () => {
+    isBotSpeaking = false;
+  };
+
+  window.speechSynthesis.speak(utterance);
+}
   // Dừng câu đang đọc trước khi đọc câu mới
   window.speechSynthesis.cancel();
 
