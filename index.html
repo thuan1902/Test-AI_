@@ -217,6 +217,17 @@ async function sendChat(){
   if (!q) return;
 
   // Xóa nội dung cũ sau khi nhấn Gửi
+  if (!q) return;
+
+  // Dừng mic khi nhấn Gửi
+  if (currentRecognition) {
+    try {
+      currentRecognition.abort();
+    } catch (error) {
+      console.log("Không thể dừng mic:", error);
+    }
+  }
+
   input.value = '';
 
   const preview = document.querySelector('#speechPreview');
