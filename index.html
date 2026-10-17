@@ -218,8 +218,8 @@ async function sendChat(){
 
   
 let autoSpeak = false;
-let isBotSpeaking = false;
-let currentRecognition = null;
+
+let autoSpeak = false;
 
 function speakText(text) {
   if (!("speechSynthesis" in window)) {
@@ -227,64 +227,6 @@ function speakText(text) {
       "Trình duyệt không hỗ trợ đọc văn bản.";
     return;
   }
-
-  // Đánh dấu Nova đang phát âm thanh
-  isBotSpeaking = true;
-
-  // Dừng mic nếu đang nghe
-  if (currentRecognition) {
-    try {
-      currentRecognition.abort();
-    } catch (error) {}
-
-    currentRecognition = null;
-  }
-
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "vi-VN";
-  utterance.rate = 1;
-  utterance.pitch = 1;
-
-  const voices = window.speechSynthesis.getVoices();
-  const vietnameseVoice = voices.find(
-    voice => voice.lang.toLowerCase().startsWith("vi")
-  );
-
-  if (vietnameseVoice) {
-    utterance.voice = vietnameseVoice;
-  }
-
-  utterance.onend = () => {
-    isBotSpeaking = false;
-  };
-
-  utterance.onerror = () => {
-    isBotSpeaking = false;
-  };
-
-  window.speechSynthesis.speak(utterance);
-}
-  // Dừng câu đang đọc trước khi đọc câu mới
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "vi-VN";
-  utterance.rate = 1;
-  utterance.pitch = 1;
-
-  const voices = window.speechSynthesis.getVoices();
-  const vietnameseVoice = voices.find(
-    voice => voice.lang.toLowerCase().startsWith("vi")
-  );
-
-  if (vietnameseVoice) {
-    utterance.voice = vietnameseVoice;
-  }
-
-  window.speechSynthesis.speak(utterance);
-}
 
 function toggleAutoSpeak() {
   autoSpeak = !autoSpeak;
