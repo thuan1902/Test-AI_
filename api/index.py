@@ -20,11 +20,32 @@ load_dotenv(
     encoding="utf-8",
 )
 
+import os
+import requests
+
 OLLAMA_URL = os.getenv(
     "OLLAMA_URL",
-    "http://127.0.0.1",
+    "https://ollama.com"
 ).rstrip("/")
 
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
+
+def ask_ollama(model, messages):
+    response = requests.post(
+        f"{OLLAMA_URL}/api/chat",
+        headers={
+            "Authorization": f"Bearer {OLLAMA_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": messages,
+            "stream": False,
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.json()["message"]["content"]
 MODEL = os.getenv(
     "OLLAMA_MODEL",
     "qwen2.5:3b",
