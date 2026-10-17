@@ -215,11 +215,6 @@ async function sendChat(){
   const input = document.querySelector('#chatInput');
   const q = input.value.trim();
   if (!q) return;
-  // Dừng mic ngay khi bấm Gửi
-if (currentRecognition) {
-  currentRecognition.stop();
-  currentRecognition = null;
-}
 
   // Xóa nội dung cũ sau khi nhấn Gửi
   input.value = '';
