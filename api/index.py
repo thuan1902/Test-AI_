@@ -25,10 +25,11 @@ import requests
 
 OLLAMA_URL = os.getenv(
     "OLLAMA_URL",
-    "https://ollama.com"
+    "https://ollama.com",
 ).rstrip("/")
 
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
+
 
 def ask_ollama(model, messages):
     response = requests.post(
