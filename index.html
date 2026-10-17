@@ -234,6 +234,24 @@ async function voiceInput(){
  }
 }
 </script>
+  
+<button onclick="testPython()">Kiểm tra Python</button>
+<p id="result"></p>
+
+<script>
+async function testPython() {
+    const result = document.getElementById("result");
+
+    try {
+        const response = await fetch("/api");
+        const data = await response.json();
+        result.textContent = data.message;
+    } catch (error) {
+        result.textContent = "Không kết nối được Python API.";
+    }
+}
+</script>
+
 </body>
 </html>
 
