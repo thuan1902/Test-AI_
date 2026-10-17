@@ -79,7 +79,22 @@ footer{padding:24px 0 8px;text-align:center;color:#7888a5;font-size:12px}
     <div class="result" id="result" aria-live="polite"></div>
   </div>
   <div class="card chat">
-    <div class="chat-head"><div><h3>Trò chuyện với Nova</h3><p class="sub">Hỏi về môn học, ngành nghề hoặc tổ hợp môn.</p></div><button class="iconbtn" onclick="clearChat()" title="Xóa hội thoại">Xóa</button></div>
+    
+    <div class="chat-head">
+      <div>
+        <h3>Trò chuyện với Nova</h3>
+        <p class="sub">Hỏi về môn học, ngành nghề hoặc tổ hợp môn.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="iconbtn" id="speakBtn" onclick="toggleAutoSpeak()">
+          🔇 Đọc tự động: Tắt
+        </button>
+        <button class="iconbtn" onclick="clearChat()" title="Xóa hội thoại">
+          Xóa
+        </button>
+      </div>
+    </div>
+
     <div class="messages" id="messages" aria-live="polite">
       <div class="msg bot"><small>NOVA</small>Chào bạn! Mình có thể giới thiệu các tổ hợp trong bản demo và giúp bạn bắt đầu tìm hiểu sở thích. Bạn đang quan tâm ngành nào?</div>
     </div>
@@ -157,7 +172,29 @@ async function recommend(){
    button.disabled=false;button.textContent='AI gợi ý tổ hợp';
  }
 }
-function addMessage(role,text){const box=document.querySelector('#messages'),div=document.createElement('div');div.className='msg '+role;const small=document.createElement('small');small.textContent=role==='bot'?'NOVA':'BẠN';div.appendChild(small);div.appendChild(document.createTextNode(text));box.appendChild(div);box.scrollTop=box.scrollHeight}
+  
+
+function addMessage(role, text) {
+  const box = document.querySelector("#messages");
+  const div = document.createElement("div");
+
+  div.className = "msg " + role;
+
+  const small = document.createElement("small");
+  small.textContent = role === "bot" ? "NOVA" : "BẠN";
+
+  div.appendChild(small);
+  div.appendChild(document.createTextNode(text));
+
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+
+  // Tự đọc câu trả lời của Nova khi bật chế độ đọc
+  if (role === "bot" && autoSpeak) {
+    speakText(text);
+  }
+}
+
 async function sendChat(){
  const input=document.querySelector('#chatInput'),q=input.value.trim();if(!q)return;input.value='';addMessage('user',q);
  try{
@@ -174,6 +211,53 @@ async function sendChat(){
    addMessage('bot',answer);
  }
 }
+
+let autoSpeak = false;
+
+function speakText(text) {
+  if (!("speechSynthesis" in window)) {
+    document.querySelector("#voiceHint").textContent =
+      "Trình duyệt không hỗ trợ đọc văn bản.";
+    return;
+  }
+
+  // Dừng câu đang đọc trước khi đọc câu mới
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "vi-VN";
+  utterance.rate = 1;
+  utterance.pitch = 1;
+
+  const voices = window.speechSynthesis.getVoices();
+  const vietnameseVoice = voices.find(
+    voice => voice.lang.toLowerCase().startsWith("vi")
+  );
+
+  if (vietnameseVoice) {
+    utterance.voice = vietnameseVoice;
+  }
+
+  window.speechSynthesis.speak(utterance);
+}
+
+function toggleAutoSpeak() {
+  autoSpeak = !autoSpeak;
+
+  const button = document.querySelector("#speakBtn");
+  button.textContent = autoSpeak
+    ? "🔊 Đọc tự động: Bật"
+    : "🔇 Đọc tự động: Tắt";
+
+  if (!autoSpeak && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+
+  document.querySelector("#voiceHint").textContent = autoSpeak
+    ? "Đã bật đọc tự động câu trả lời của Nova."
+    : "Đã tắt đọc tự động.";
+}
+
 function clearChat(){document.querySelector('#messages').innerHTML='';addMessage('bot','Hội thoại đã được làm mới. Mình là Nova, trợ lý tìm hiểu tổ hợp môn.')}
 function resetAdvisor(){
  document.querySelector('#name').value='';
