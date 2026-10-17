@@ -210,15 +210,11 @@ function addMessage(role, text) {
   }
 }
 
-async function sendChat(){
- 
-  const input = document.querySelector('#chatInput');
-  const q = input.value.trim();
-  if (!q) return;
-
-  
+// Trạng thái đọc tự động và nhận dạng giọng nói
 let autoSpeak = false;
+let currentRecognition = null;
 
+// Đọc câu trả lời của Nova
 function speakText(text) {
   if (!("speechSynthesis" in window)) {
     document.querySelector("#voiceHint").textContent =
@@ -226,6 +222,26 @@ function speakText(text) {
     return;
   }
 
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "vi-VN";
+  utterance.rate = 1;
+  utterance.pitch = 1;
+
+  const voices = window.speechSynthesis.getVoices();
+  const vietnameseVoice = voices.find(
+    voice => voice.lang.toLowerCase().startsWith("vi")
+  );
+
+  if (vietnameseVoice) {
+    utterance.voice = vietnameseVoice;
+  }
+
+  window.speechSynthesis.speak(utterance);
+}
+
+// Bật hoặc tắt đọc tự động
 function toggleAutoSpeak() {
   autoSpeak = !autoSpeak;
 
@@ -243,6 +259,60 @@ function toggleAutoSpeak() {
     : "Đã tắt đọc tự động.";
 }
 
+// Gửi tin nhắn
+async function sendChat() {
+  const input = document.querySelector("#chatInput");
+  const q = input.value.trim();
+
+  if (!q) return;
+
+  // Dừng nhận dạng giọng nói khi nhấn Gửi
+  if (currentRecognition) {
+    try {
+      currentRecognition.abort();
+    } catch (error) {
+      console.log("Không thể dừng mic:", error);
+    }
+    currentRecognition = null;
+  }
+
+  input.value = "";
+
+  const preview = document.querySelector("#speechPreview");
+  const speechText = document.querySelector("#speechText");
+
+  if (preview) preview.style.display = "none";
+  if (speechText) speechText.textContent = "";
+
+  const hint = document.querySelector("#voiceHint");
+  if (hint) {
+    hint.textContent = "Đã gửi câu hỏi. Đang chờ Nova trả lời...";
+  }
+
+  addMessage("user", q);
+
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: q })
+    });
+
+    if (!response.ok) {
+      throw new Error("AI server unavailable");
+    }
+
+    const data = await response.json();
+    addMessage("bot", data.answer || "Máy chủ chưa trả lời.");
+  } catch (error) {
+    console.error("Lỗi gửi tin nhắn:", error);
+
+    addMessage(
+      "bot",
+      "Không thể kết nối máy chủ AI. Hãy kiểm tra API hoặc kết nối mạng."
+    );
+  }
+}
 function clearChat(){document.querySelector('#messages').innerHTML='';addMessage('bot','Hội thoại đã được làm mới. Mình là Nova, trợ lý tìm hiểu tổ hợp môn.')}
 function resetAdvisor(){
  document.querySelector('#name').value='';
@@ -282,6 +352,7 @@ async function voiceInput() {
     stream.getTracks().forEach(track => track.stop());
 
     const recognition = new SpeechRecognition();
+    currentRecognition = recognition;
     let finalText = '';
 
     recognition.lang = 'vi-VN';
