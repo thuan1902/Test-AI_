@@ -210,13 +210,10 @@ function addMessage(role, text) {
   }
 }
 
-async function sendChat(){
- 
+async function sendChat() {
   const input = document.querySelector('#chatInput');
   const q = input.value.trim();
-  if (!q) return;
 
-  // Xóa nội dung cũ sau khi nhấn Gửi
   if (!q) return;
 
   // Dừng mic khi nhấn Gửi
@@ -228,6 +225,37 @@ async function sendChat(){
     }
   }
 
+  input.value = '';
+
+  const preview = document.querySelector('#speechPreview');
+  const speechText = document.querySelector('#speechText');
+
+  if (preview) preview.style.display = 'none';
+  if (speechText) speechText.textContent = '';
+
+  const hint = document.querySelector('#voiceHint');
+  if (hint) {
+    hint.textContent = 'Đã gửi câu hỏi. Bạn có thể nhập hoặc nói câu hỏi mới.';
+  }
+
+  addMessage('user', q);
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: q })
+    });
+
+    if (!response.ok) throw new Error('AI server unavailable');
+
+    const data = await response.json();
+    addMessage('bot', data.answer || 'Máy chủ chưa trả lời.');
+  } catch (error) {
+    console.error(error);
+    addMessage('bot', 'Không thể kết nối máy chủ AI. Vui lòng thử lại.');
+  }
+}
   input.value = '';
 
   const preview = document.querySelector('#speechPreview');
