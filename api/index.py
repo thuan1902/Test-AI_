@@ -34,7 +34,7 @@ OLLAMA_API_KEY = os.getenv(
 
 MODEL = os.getenv(
     "OLLAMA_MODEL",
-    "qwen2.5:3b",
+    "gemma4:31b-cloud",
 ).strip()
 
 REQUEST_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
