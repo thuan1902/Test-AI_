@@ -260,19 +260,17 @@ function toggleAutoSpeak() {
 }
 
 // Gửi tin nhắn
+
 async function sendChat() {
   const input = document.querySelector("#chatInput");
   const q = input.value.trim();
 
   if (!q) return;
 
-  // Dừng nhận dạng giọng nói khi nhấn Gửi
   if (currentRecognition) {
     try {
       currentRecognition.abort();
-    } catch (error) {
-      console.log("Không thể dừng mic:", error);
-    }
+    } catch (error) {}
     currentRecognition = null;
   }
 
@@ -284,10 +282,8 @@ async function sendChat() {
   if (preview) preview.style.display = "none";
   if (speechText) speechText.textContent = "";
 
-  const hint = document.querySelector("#voiceHint");
-  if (hint) {
-    hint.textContent = "Đã gửi câu hỏi. Đang chờ Nova trả lời...";
-  }
+  document.querySelector("#voiceHint").textContent =
+    "Đang chờ Nova trả lời...";
 
   addMessage("user", q);
 
@@ -295,7 +291,13 @@ async function sendChat() {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: q })
+      body: JSON.stringify({
+        message:
+          "Hãy trả lời bằng tiếng Việt, súc tích, tối đa 4 dòng. " +
+          "Mỗi dòng chỉ nên có một ý chính. Không chào hỏi dài dòng, " +
+          "không nhắc lại câu hỏi. Ưu tiên câu trả lời trực tiếp. " +
+          "Câu hỏi: " + q
+      })
     });
 
     if (!response.ok) {
@@ -303,16 +305,27 @@ async function sendChat() {
     }
 
     const data = await response.json();
-    addMessage("bot", data.answer || "Máy chủ chưa trả lời.");
+    const answer = (data.answer || "Nova chưa có câu trả lời.")
+      .trim();
+
+    addMessage("bot", answer);
+    document.querySelector("#voiceHint").textContent =
+      "Nova đã trả lời.";
   } catch (error) {
     console.error("Lỗi gửi tin nhắn:", error);
 
     addMessage(
       "bot",
-      "Không thể kết nối máy chủ AI. Hãy kiểm tra API hoặc kết nối mạng."
+      "Chưa kết nối được máy chủ AI.\n" +
+      "Hãy kiểm tra API và kết nối mạng."
     );
+
+    document.querySelector("#voiceHint").textContent =
+      "Gửi tin nhắn thất bại.";
   }
 }
+
+
 function clearChat(){document.querySelector('#messages').innerHTML='';addMessage('bot','Hội thoại đã được làm mới. Mình là Nova, trợ lý tìm hiểu tổ hợp môn.')}
 function resetAdvisor(){
  document.querySelector('#name').value='';
