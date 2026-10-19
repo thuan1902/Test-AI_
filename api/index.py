@@ -70,7 +70,8 @@ Quy tắc trả lời:
 # GỌI OLLAMA CLOUD
 # =========================
 
-def ask_ollama(question):
+
+def ask_ollama(question, history=None):
     if not OLLAMA_API_KEY:
         raise RuntimeError(
             "Thiếu biến môi trường OLLAMA_API_KEY trên Vercel."
@@ -81,20 +82,45 @@ def ask_ollama(question):
             "Thiếu biến môi trường OLLAMA_MODEL trên Vercel."
         )
 
+    # Tạo danh sách tin nhắn, bắt đầu bằng hướng dẫn hệ thống.
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        }
+    ]
+
+    # Thêm lịch sử trò chuyện trước đó.
+    if isinstance(history, list):
+        for item in history[-12:]:
+            if not isinstance(item, dict):
+                continue
+
+            role = item.get("role")
+            content = item.get("content")
+
+            if role not in ("user", "assistant"):
+                continue
+
+            if not isinstance(content, str) or not content.strip():
+                continue
+
+            messages.append({
+                "role": role,
+                "content": content[:6000],
+            })
+
+    # Thêm câu hỏi hiện tại sau lịch sử.
+    messages.append({
+        "role": "user",
+        "content": question,
+    })
+
     url = f"{OLLAMA_URL}/api/chat"
 
     payload = {
         "model": MODEL,
-        "messages": [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": question,
-            },
-        ],
+        "messages": messages,
         "stream": False,
     }
 
@@ -108,7 +134,6 @@ def ask_ollama(question):
             json=payload,
             timeout=REQUEST_TIMEOUT,
         )
-
         response.raise_for_status()
 
     except requests.exceptions.Timeout as exc:
@@ -132,26 +157,11 @@ def ask_ollama(question):
             f"Ollama trả về HTTP {response.status_code}: {detail}"
         ) from exc
 
-    try:
-        result = response.json()
-    except ValueError as exc:
-        raise RuntimeError(
-            "Ollama trả về dữ liệu JSON không hợp lệ."
-        ) from exc
-
-    answer = (
-        result.get("message", {}).get("content", "")
-        if isinstance(result, dict)
-        else ""
-    )
-
-    answer = answer.strip()
+    result = response.json()
+    answer = result.get("message", {}).get("content", "").strip()
 
     if not answer:
-        raise RuntimeError(
-            "Model không trả về nội dung. "
-            "Hãy kiểm tra tên model và phản hồi từ Ollama."
-        )
+        raise RuntimeError("Model không trả về nội dung.")
 
     return answer
 
@@ -197,18 +207,28 @@ def health():
 # CHAT
 # =========================
 
+
 @app.post("/api/chat")
 def chat():
     data = request.get_json(silent=True) or {}
+
     question = str(data.get("message", "")).strip()
+    history = data.get("history", [])
 
     if not question:
         return jsonify({
             "answer": "Bạn hãy nhập câu hỏi nhé."
         }), 400
 
+    if not isinstance(history, list):
+        history = []
+
     try:
-        answer = ask_ollama(question)
+        answer = ask_ollama(
+            question,
+            history=history,
+        )
+
         return jsonify({"answer": answer})
 
     except Exception as exc:
