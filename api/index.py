@@ -92,7 +92,7 @@ def ask_ollama(question, history=None):
 
     # Thêm lịch sử trò chuyện trước đó.
     if isinstance(history, list):
-        for item in history[-12:]:
+        for item in history[-500:]:
             if not isinstance(item, dict):
                 continue
 
