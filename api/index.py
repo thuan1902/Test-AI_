@@ -30,8 +30,8 @@ def health():
     configured = bool(OLLAMA_API_KEY and MODEL and OLLAMA_URL)
     return jsonify({
         "server": "ok",
-        "ollama_configured": configured,
-        "model": MODEL or None,
+        "ollama_configured": "https://ollama.com",
+        "model": "gemma4:31b-cloud",
         "message": (
             "Đã cấu hình Ollama Cloud."
             if configured
