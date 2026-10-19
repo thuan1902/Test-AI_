@@ -189,25 +189,46 @@ async function recommend(){
 }
   
 
+const CHAT_STORAGE_KEY = "nova_chat_history_v1";
+const MAX_HISTORY_MESSAGES = 30;
+let chatHistory = loadChatHistory();
+let chatSending = false;
+
+function loadChatHistory() {
+  try {
+    const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(item => item &&
+      ["user", "assistant"].includes(item.role) &&
+      typeof item.content === "string").slice(-MAX_HISTORY_MESSAGES);
+  } catch (error) {
+    console.warn("Không đọc được lịch sử Nova:", error);
+    return [];
+  }
+}
+
+function saveChatHistory() {
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY,
+      JSON.stringify(chatHistory.slice(-MAX_HISTORY_MESSAGES)));
+  } catch (error) {
+    console.warn("Không lưu được lịch sử Nova:", error);
+  }
+}
+
 function addMessage(role, text) {
   const box = document.querySelector("#messages");
+  if (!box) return;
   const div = document.createElement("div");
-
-  div.className = "msg " + role;
-
+  div.className = "msg " + (role === "assistant" ? "bot" : role);
   const small = document.createElement("small");
-  small.textContent = role === "bot" ? "NOVA" : "BẠN";
-
+  small.textContent = role === "bot" || role === "assistant" ? "NOVA" : "BẠN";
   div.appendChild(small);
   div.appendChild(document.createTextNode(text));
-
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
-
-  // Tự đọc câu trả lời của Nova khi bật chế độ đọc
-  if (role === "bot" && autoSpeak) {
-    speakText(text);
-  }
+  if ((role === "bot" || role === "assistant") && autoSpeak) speakText(text);
 }
 
 // Trạng thái đọc tự động và nhận dạng giọng nói
@@ -262,71 +283,86 @@ function toggleAutoSpeak() {
 // Gửi tin nhắn
 
 async function sendChat() {
+  if (chatSending) return;
   const input = document.querySelector("#chatInput");
+  if (!input) return;
   const q = input.value.trim();
-
   if (!q) return;
 
   if (currentRecognition) {
-    try {
-      currentRecognition.abort();
-    } catch (error) {}
+    try { currentRecognition.abort(); } catch (error) {}
     currentRecognition = null;
   }
 
   input.value = "";
-
   const preview = document.querySelector("#speechPreview");
   const speechText = document.querySelector("#speechText");
-
   if (preview) preview.style.display = "none";
   if (speechText) speechText.textContent = "";
 
-  document.querySelector("#voiceHint").textContent =
-    "Đang chờ Nova trả lời...";
-
+  chatSending = true;
+  const sendButton = document.querySelector(".chat-input .btn");
+  if (sendButton) sendButton.disabled = true;
+  const previousHistory = chatHistory.slice(-MAX_HISTORY_MESSAGES);
+  chatHistory.push({ role: "user", content: q });
+  chatHistory = chatHistory.slice(-MAX_HISTORY_MESSAGES);
+  saveChatHistory();
   addMessage("user", q);
+  document.querySelector("#voiceHint").textContent = "Nova đang trả lời...";
 
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message:
-          "Hãy trả lời bằng tiếng Việt, súc tích, tối đa 4 dòng. " +
-          "Mỗi dòng chỉ nên có một ý chính. Không chào hỏi dài dòng, " +
-          "không nhắc lại câu hỏi. Ưu tiên câu trả lời trực tiếp. " +
-          "Câu hỏi: " + q
-      })
+      body: JSON.stringify({ message: q, history: previousHistory })
     });
-
-    if (!response.ok) {
-      throw new Error("AI server unavailable");
-    }
-
-    const data = await response.json();
-    const answer = (data.answer || "Nova chưa có câu trả lời.")
-      .trim();
-
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Máy chủ AI gặp lỗi.");
+    const answer = String(data.answer || "").trim();
+    if (!answer) throw new Error("AI chưa trả về câu trả lời.");
+    chatHistory.push({ role: "assistant", content: answer });
+    chatHistory = chatHistory.slice(-MAX_HISTORY_MESSAGES);
+    saveChatHistory();
     addMessage("bot", answer);
-    document.querySelector("#voiceHint").textContent =
-      "Nova đã trả lời.";
+    document.querySelector("#voiceHint").textContent = "Nova đã trả lời.";
   } catch (error) {
     console.error("Lỗi gửi tin nhắn:", error);
-
-    addMessage(
-      "bot",
-      "Chưa kết nối được máy chủ AI.\n" +
-      "Hãy kiểm tra API và kết nối mạng."
-    );
-
-    document.querySelector("#voiceHint").textContent =
-      "Gửi tin nhắn thất bại.";
+    addMessage("bot", "Chưa kết nối được máy chủ AI. " + error.message);
+    document.querySelector("#voiceHint").textContent = "Gửi tin nhắn thất bại.";
+  } finally {
+    chatSending = false;
+    if (sendButton) sendButton.disabled = false;
+    input.focus();
   }
 }
 
+function clearChat() {
+  if (chatSending) return;
+  if (!confirm("Bạn có muốn xóa toàn bộ lịch sử trò chuyện với Nova trên trình duyệt này không?")) return;
+  chatHistory = [];
+  try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch (error) {}
+  const box = document.querySelector("#messages");
+  if (box) box.innerHTML = "";
+  addMessage("bot", "Hội thoại đã được làm mới. Mình là Nova, trợ lý tìm hiểu tổ hợp môn.");
+}
 
-function clearChat(){document.querySelector('#messages').innerHTML='';addMessage('bot','Hội thoại đã được làm mới. Mình là Nova, trợ lý tìm hiểu tổ hợp môn.')}
+function restoreChatHistory() {
+  const box = document.querySelector("#messages");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!chatHistory.length) {
+    addMessage("bot", "Chào bạn! Mình có thể giới thiệu các tổ hợp trong bản demo và giúp bạn bắt đầu tìm hiểu sở thích. Bạn đang quan tâm ngành nào?");
+    return;
+  }
+  chatHistory.forEach(item => addMessage(item.role === "user" ? "user" : "bot", item.content));
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", restoreChatHistory);
+} else {
+  restoreChatHistory();
+}
+
 function resetAdvisor(){
  document.querySelector('#name').value='';
  document.querySelector('#goal').selectedIndex=0;
