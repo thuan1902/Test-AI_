@@ -134,6 +134,7 @@ def ask_ollama(question):
     return answer
 
 
+
 # =========================
 # TRANG CHỦ
 # =========================
