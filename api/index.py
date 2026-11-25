@@ -9,35 +9,34 @@ from flask import Flask, request, jsonify, send_from_directory
 
 
 # =========================
-# CẤU HÌNH
+# ĐƯỜNG DẪN VÀ CẤU HÌNH
 # =========================
-
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = BASE_DIR.parent
+ENV_PATH = BASE_DIR / ".env"
 
-# Không ghi đè biến môi trường Vercel bằng file .env
 load_dotenv(
-    dotenv_path=PROJECT_DIR / ".env",
-    override=False,
+    dotenv_path=ENV_PATH,
+    override=True,
     encoding="utf-8",
 )
 
 OLLAMA_URL = os.getenv(
     "OLLAMA_URL",
-    "https://ollama.com",
-).strip().rstrip("/")
-
-OLLAMA_API_KEY = os.getenv(
-    "OLLAMA_API_KEY",
-    "",
-).strip()
+    "http://127.0.0.1:11434",
+).rstrip("/")
 
 MODEL = os.getenv(
     "OLLAMA_MODEL",
     "qwen2.5:3b",
 ).strip()
 
-REQUEST_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
+REQUEST_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
+
+print("Thư mục server.py:", BASE_DIR)
+print("Đường dẫn .env:", ENV_PATH)
+print("File .env tồn tại:", ENV_PATH.is_file())
+print("OLLAMA_URL:", OLLAMA_URL)
+print("OLLAMA_MODEL:", repr(MODEL))
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -46,9 +45,9 @@ app.logger.setLevel(logging.INFO)
 # =========================
 # PROMPT HỆ THỐNG
 # =========================
-
 SYSTEM_PROMPT = """
 Bạn là Nova AI, trợ lý tư vấn chọn tổ hợp môn lớp 10.
+
 Quy tắc:
 - Trả lời bằng tiếng Việt.
 - Thân thiện, rõ ràng, dễ hiểu với học sinh.
@@ -56,94 +55,50 @@ Quy tắc:
 - Giải thích lý do cho từng đề xuất.
 - Không tự bịa dữ liệu hoặc thông tin tuyển sinh.
 - Nhắc học sinh xác nhận phương án chính thức với nhà trường.
-Quy tắc trả lời:
-- Dùng tiếng Việt tự nhiên, dễ hiểu.
-- Tối đa 3 dòng liền mạch.
-- Mỗi dòng chỉ nêu một ý chính.
-- Không mở đầu xã giao, không lặp lại câu hỏi.
-- Nếu cần hướng dẫn, chỉ nêu các bước quan trọng nhất.
 """
 
 
 # =========================
-# GỌI OLLAMA CLOUD
+# GỌI MODEL QUA OLLAMA
 # =========================
-
-def ask_ollama(question, history=None):
-    if not OLLAMA_API_KEY:
-        raise RuntimeError(
-            "Thiếu biến môi trường OLLAMA_API_KEY trên Vercel."
-        )
-
+def ask_ollama(question):
     if not MODEL:
-        raise RuntimeError(
-            "Thiếu biến môi trường OLLAMA_MODEL trên Vercel."
-        )
-
-    # Tạo danh sách tin nhắn, bắt đầu bằng hướng dẫn hệ thống.
-    messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT,
-        }
-    ]
-
-    # Thêm lịch sử trò chuyện trước đó.
-    if isinstance(history, list):
-        for item in history[-500:]:
-            if not isinstance(item, dict):
-                continue
-
-            role = item.get("role")
-            content = item.get("content")
-
-            if role not in ("user", "assistant"):
-                continue
-
-            if not isinstance(content, str) or not content.strip():
-                continue
-
-            messages.append({
-                "role": role,
-                "content": content[:6000],
-            })
-
-    # Thêm câu hỏi hiện tại sau lịch sử.
-    messages.append({
-        "role": "user",
-        "content": question,
-    })
+        raise RuntimeError("Chưa cấu hình OLLAMA_MODEL trong .env.")
 
     url = f"{OLLAMA_URL}/api/chat"
 
     payload = {
         "model": MODEL,
-        "messages": messages,
+        "messages": [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": question,
+            },
+        ],
         "stream": False,
     }
 
     try:
         response = requests.post(
             url,
-            headers={
-                "Authorization": f"Bearer {OLLAMA_API_KEY}",
-                "Content-Type": "application/json",
-            },
             json=payload,
             timeout=REQUEST_TIMEOUT,
         )
-
         response.raise_for_status()
+
+    except requests.exceptions.ConnectionError as exc:
+        raise RuntimeError(
+            "Không kết nối được Ollama. "
+            "Hãy kiểm tra Ollama có đang chạy không."
+        ) from exc
 
     except requests.exceptions.Timeout as exc:
         raise RuntimeError(
             f"Ollama phản hồi quá {REQUEST_TIMEOUT} giây."
-        ) from exc
-
-    except requests.exceptions.ConnectionError as exc:
-        raise RuntimeError(
-            "Không kết nối được Ollama Cloud. "
-            "Kiểm tra OLLAMA_URL và kết nối mạng."
         ) from exc
 
     except requests.exceptions.HTTPError as exc:
@@ -156,12 +111,25 @@ def ask_ollama(question, history=None):
             f"Ollama trả về HTTP {response.status_code}: {detail}"
         ) from exc
 
-    result = response.json()
+    try:
+        result = response.json()
+    except ValueError as exc:
+        raise RuntimeError(
+            "Ollama trả về dữ liệu JSON không hợp lệ."
+        ) from exc
 
-    answer = result.get("message", {}).get("content", "").strip()
+    answer = (
+        result.get("message", {}).get("content", "")
+        if isinstance(result, dict)
+        else ""
+    )
+
+    answer = answer.strip()
 
     if not answer:
-        raise RuntimeError("Model không trả về nội dung.")
+        raise RuntimeError(
+            "Model Ollama không trả về nội dung văn bản."
+        )
 
     return answer
 
@@ -169,72 +137,77 @@ def ask_ollama(question, history=None):
 # =========================
 # TRANG CHỦ
 # =========================
-
 @app.get("/")
 def home():
-    index_file = PROJECT_DIR / "index.html"
-
-    if index_file.is_file():
-        return send_from_directory(PROJECT_DIR, "index.html")
-
-    return jsonify({
-        "server": "ok",
-        "message": "Nova AI API đang hoạt động."
-    })
+    return send_from_directory(BASE_DIR, "index.html")
 
 
 # =========================
-# KIỂM TRA SERVER
+# KIỂM TRA SERVER VÀ OLLAMA
 # =========================
-
 @app.get("/api/health")
 def health():
-    configured = bool(OLLAMA_API_KEY and MODEL)
+    ollama_ok = False
+    available_models = []
+    error = None
+
+    try:
+        response = requests.get(
+            f"{OLLAMA_URL}/api/tags",
+            timeout=5,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        available_models = [
+            item.get("name", "")
+            for item in data.get("models", [])
+        ]
+        ollama_ok = True
+
+    except Exception as exc:
+        error = str(exc)
 
     return jsonify({
         "server": "ok",
-        "ollama_configured": configured,
-        "model": MODEL or None,
-        "message": (
-            "Đã cấu hình Ollama Cloud."
-            if configured
-            else "Thiếu OLLAMA_API_KEY hoặc OLLAMA_MODEL."
-        ),
-    }), 200 if configured else 503
+        "ollama": "ok" if ollama_ok else "unavailable",
+        "model": MODEL,
+        "model_installed": MODEL in available_models
+            or any(
+                name.split(":")[0] == MODEL.split(":")[0]
+                for name in available_models
+            ),
+        "available_models": available_models,
+        "error": error,
+    })
 
 
 # =========================
 # CHAT
 # =========================
-
 @app.post("/api/chat")
 def chat():
     data = request.get_json(silent=True) or {}
-
     question = str(data.get("message", "")).strip()
-    history = data.get("history", [])
 
     if not question:
         return jsonify({
             "answer": "Bạn hãy nhập câu hỏi nhé."
         }), 400
 
-    if not isinstance(history, list):
-        history = []
-
     try:
-        answer = ask_ollama(
-            question,
-            history=history,
-        )
-
+        answer = ask_ollama(question)
         return jsonify({"answer": answer})
 
     except Exception as exc:
         app.logger.exception("Ollama chat error")
 
         return jsonify({
-            "answer": "Nova chưa gọi được model Ollama Cloud.",
+            "answer": (
+                "Nova chưa gọi được model Ollama. "
+                "Hãy kiểm tra Ollama và xem lỗi trong Terminal."
+            ),
+            "error_type": type(exc).__name__,
             "detail": str(exc),
         }), 502
 
@@ -242,7 +215,6 @@ def chat():
 # =========================
 # TƯ VẤN TỔ HỢP MÔN
 # =========================
-
 @app.post("/api/recommend")
 def recommend():
     data = request.get_json(silent=True) or {}
@@ -290,10 +262,33 @@ Yêu cầu:
         app.logger.exception("Ollama recommendation error")
 
         return jsonify({
-            "answer": "Nova chưa tạo được gợi ý từ Ollama Cloud.",
+            "answer": (
+                "Nova chưa tạo được gợi ý. "
+                "Hãy kiểm tra Ollama và xem lỗi trong Terminal."
+            ),
+            "error_type": type(exc).__name__,
             "detail": str(exc),
         }), 502
 
 
-# Vercel sẽ quản lý việc khởi chạy ứng dụng.
-# Không chạy waitress hoặc mở trình duyệt tại đây.
+# =========================
+# KHỞI ĐỘNG SERVER
+# =========================
+if __name__ == "__main__":
+    from waitress import serve
+    import webbrowser
+
+    host = "127.0.0.1"
+    port = 5000
+    url = f"http://{host}:{port}"
+
+    print("\n================================")
+    print("       NOVA AI ĐANG CHẠY")
+    print(f"Website: {url}")
+    print(f"Model: {MODEL}")
+    print("Backend: Ollama")
+    print("================================\n")
+
+    webbrowser.open(url)
+
+    serve(app, host=host, port=port)
