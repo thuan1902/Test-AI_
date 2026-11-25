@@ -12,7 +12,7 @@ from flask import Flask, request, jsonify, send_from_directory
 # ĐƯỜNG DẪN VÀ CẤU HÌNH
 # =========================
 BASE_DIR = Path(__file__).resolve().parent
-ENV_PATH = BASE_DIR / ".env"
+PROJECT_DIR = BASE_DIR.parent
 
 load_dotenv(
     dotenv_path=ENV_PATH,
