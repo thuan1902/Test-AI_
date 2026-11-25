@@ -27,7 +27,7 @@ OLLAMA_URL = os.getenv(
 
 MODEL = os.getenv(
     "OLLAMA_MODEL",
-    "qwen2.5:3b",
+    "gemma4:31b",
 ).strip()
 
 REQUEST_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
