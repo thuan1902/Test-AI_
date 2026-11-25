@@ -127,7 +127,7 @@ footer{padding:24px 0 8px;text-align:center;color:#7888a5;font-size:12px}
     <article class="combo"><span class="code">TH03</span><h4>Xã hội & sáng tạo</h4><p><b>Môn:</b> Lịch sử, Địa lí, Kinh tế & Pháp luật, Âm nhạc.</p><p><b>Tham khảo:</b> Luật, Báo chí, Ngôn ngữ, Sư phạm, Truyền thông.</p></article>
   </div>
 </section>
-<footer>Nova AI · Bản giao diện minh họa cho dự án STEM · Cần chạy máy chủ Python đã cấu hình Gemini API để dùng AI trực tuyến</footer>
+<footer>Nova AI · Bản giao diện minh họa cho dự án STEM · Cần chạy máy chủ Python đã cấu hình Ollama API để dùng AI trực tuyến</footer>
 </div>
 <script>
 const subjects = [
@@ -169,8 +169,10 @@ async function recommend(){
  result.innerHTML='<h4>Đang tổng hợp lựa chọn của bạn</h4><p>Nova đang xem mức ưu tiên của từng môn và đối chiếu với các tổ hợp mẫu...</p>';
  try{
    const response=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-   if(!response.ok) throw new Error('API không khả dụng');
-   const data=await response.json();
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok) {
+     throw new Error(data.detail || data.error || data.answer || `API không khả dụng (HTTP ${response.status}).`);
+   }
    if(!data.answer) throw new Error('Máy chủ chưa trả về câu trả lời');
    result.innerHTML=`<h4>Gợi ý từ Nova AI</h4><div class="ai-answer">${escapeHTML(data.answer).replace(/\n/g,'<br>')}</div><p class="hint">Kết quả là gợi ý tham khảo. Hãy xác nhận tổ hợp được trường mở và điều kiện tuyển sinh hiện hành.</p>`;
    addMessage('bot',data.answer);
@@ -180,7 +182,7 @@ async function recommend(){
      return {id,c,total};
    }).sort((a,b)=>b.total-a.total);
    const best=ranked[0], second=ranked[1];
-   const answer=`Chế độ demo (chưa kết nối AI): ${best.c.name} có tổng điểm ưu tiên ${best.total}/20 trong các môn của tổ hợp. Tổ hợp gồm ${best.c.subjects.join(', ')}. Nhóm ngành tham khảo trong đề án: ${best.c.fields}. Phương án nên so sánh thêm: ${second.c.name}. Đây chỉ là phép đối chiếu điểm ưu tiên, chưa phải phân tích AI thực sự. Hãy chạy máy chủ Python và chạy máy chủ Python và cấu hình GEMINI_API_KEY để Nova tự tổng hợp câu trả lời.`;
+   const answer=`Chế độ demo (chưa kết nối AI): ${best.c.name} có tổng điểm ưu tiên ${best.total}/20 trong các môn của tổ hợp. Tổ hợp gồm ${best.c.subjects.join(', ')}. Nhóm ngành tham khảo trong đề án: ${best.c.fields}. Phương án nên so sánh thêm: ${second.c.name}. Đây chỉ là phép đối chiếu điểm ưu tiên, chưa phải phân tích AI thực sự. Hãy chạy máy chủ Python đã cấu hình Ollama API để Nova tự tổng hợp câu trả lời.`;
    result.innerHTML=`<h4>Gợi ý tạm thời từ bản demo</h4><div class="ai-answer">${escapeHTML(answer)}</div><p class="hint">Máy chủ AI chưa kết nối hoặc chưa chạy. Bản demo vẫn tính điểm đơn giản để bạn kiểm tra giao diện.</p>`;
    addMessage('bot',answer);
  }finally{
@@ -317,7 +319,9 @@ async function sendChat() {
       body: JSON.stringify({ message: q, history: previousHistory })
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Máy chủ AI gặp lỗi.");
+    if (!response.ok) {
+      throw new Error(data.detail || data.error || data.answer || `Máy chủ AI gặp lỗi (HTTP ${response.status}).`);
+    }
     const answer = String(data.answer || "").trim();
     if (!answer) throw new Error("AI chưa trả về câu trả lời.");
     chatHistory.push({ role: "assistant", content: answer });
