@@ -7,35 +7,22 @@ import requests
 from flask import Flask, request, jsonify, send_from_directory
 
 
-# =====================================================
-# CẤU HÌNH
-# =====================================================
+# =========================
+# CẤU HÌNH VERCEL
+# =========================
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BASE_DIR.parent
 
-# Đọc trực tiếp Environment Variables trên Vercel.
-# Không sử dụng file .env.
+# Đọc trực tiếp Environment Variables của Vercel.
+# Không cần file .env.
 
-OLLAMA_URL = os.getenv(
-    "OLLAMA_URL",
-    "https://ollama.com"
-).strip().rstrip("/")
-
-OLLAMA_API_KEY = os.getenv(
-    "OLLAMA_API_KEY",
-    ""
-).strip()
-
-MODEL = os.getenv(
-    "OLLAMA_MODEL",
-    "glm-5.3-flash"
-).strip()
+OLLAMA_URL = os.getenv("OLLAMA_URL", "").strip().rstrip("/")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
+MODEL = os.getenv("OLLAMA_MODEL", "").strip()
 
 try:
-    REQUEST_TIMEOUT = int(
-        os.getenv("OLLAMA_TIMEOUT", "180")
-    )
+    REQUEST_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
 except (TypeError, ValueError):
     REQUEST_TIMEOUT = 180
 
@@ -43,9 +30,9 @@ app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
 
-# =====================================================
+# =========================
 # PROMPT HỆ THỐNG
-# =====================================================
+# =========================
 
 SYSTEM_PROMPT = """
 Bạn là Nova AI, trợ lý tư vấn chọn tổ hợp môn lớp 10.
@@ -60,25 +47,40 @@ Quy tắc:
 """
 
 
-# =====================================================
-# XÁC THỰC OLLAMA
-# =====================================================
+# =========================
+# KIỂM TRA CẤU HÌNH
+# =========================
+
+def check_config():
+
+    missing = []
+
+    if not OLLAMA_URL:
+        missing.append("OLLAMA_URL")
+
+    if not OLLAMA_API_KEY:
+        missing.append("OLLAMA_API_KEY")
+
+    if not MODEL:
+        missing.append("OLLAMA_MODEL")
+
+    if missing:
+        raise RuntimeError(
+            "Thiếu Environment Variables: "
+            + ", ".join(missing)
+        )
+
+
+# =========================
+# HEADER XÁC THỰC
+# =========================
 
 def get_ollama_headers():
 
-    if not OLLAMA_URL:
-        raise RuntimeError(
-            "Chưa cấu hình OLLAMA_URL trên Vercel."
-        )
-
-    if not OLLAMA_API_KEY:
-        raise RuntimeError(
-            "Thiếu OLLAMA_API_KEY trong Vercel Environment Variables."
-        )
+    check_config()
 
     token = OLLAMA_API_KEY
 
-    # Tránh trường hợp người dùng đã nhập sẵn Bearer.
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
 
@@ -89,14 +91,14 @@ def get_ollama_headers():
     }
 
 
-# =====================================================
+# =========================
 # GỬI REQUEST ĐẾN OLLAMA
-# =====================================================
+# =========================
 
 def ollama_request(endpoint, payload=None, timeout=None):
 
-    url = f"{OLLAMA_URL}{endpoint}"
     headers = get_ollama_headers()
+    url = f"{OLLAMA_URL}{endpoint}"
 
     try:
 
@@ -120,38 +122,34 @@ def ollama_request(endpoint, payload=None, timeout=None):
         if not response.ok:
 
             try:
-                error_data = response.json()
-                detail = error_data.get(
-                    "error",
-                    response.text
-                )
+                data = response.json()
+                detail = data.get("error", response.text)
             except ValueError:
                 detail = response.text
 
             if response.status_code == 401:
                 raise RuntimeError(
-                    "HTTP 401 Unauthorized: Ollama không chấp nhận API key."
+                    "HTTP 401 Unauthorized: Ollama từ chối API key."
                 )
 
-            elif response.status_code == 403:
+            if response.status_code == 403:
                 raise RuntimeError(
                     f"HTTP 403 Forbidden: Không có quyền truy cập. {detail}"
                 )
 
-            elif response.status_code == 404:
+            if response.status_code == 404:
                 raise RuntimeError(
-                    f"HTTP 404 Not Found: Kiểm tra endpoint hoặc model. {detail}"
+                    f"HTTP 404: Không tìm thấy endpoint hoặc model. {detail}"
                 )
 
-            elif response.status_code == 429:
+            if response.status_code == 429:
                 raise RuntimeError(
                     f"HTTP 429: Vượt giới hạn yêu cầu. {detail}"
                 )
 
-            else:
-                raise RuntimeError(
-                    f"Ollama HTTP {response.status_code}: {detail}"
-                )
+            raise RuntimeError(
+                f"Ollama HTTP {response.status_code}: {detail}"
+            )
 
         return response
 
@@ -164,26 +162,23 @@ def ollama_request(endpoint, payload=None, timeout=None):
     except requests.exceptions.ConnectionError as exc:
 
         raise RuntimeError(
-            f"Không thể kết nối đến Ollama: {OLLAMA_URL}"
+            f"Không kết nối được tới Ollama: {OLLAMA_URL}"
         ) from exc
 
     except requests.exceptions.RequestException as exc:
 
         raise RuntimeError(
-            f"Lỗi gửi request đến Ollama: {exc}"
+            f"Lỗi request Ollama: {exc}"
         ) from exc
 
 
-# =====================================================
+# =========================
 # GỌI MODEL OLLAMA
-# =====================================================
+# =========================
 
 def ask_ollama(question):
 
-    if not MODEL:
-        raise RuntimeError(
-            "Chưa cấu hình OLLAMA_MODEL trên Vercel."
-        )
+    check_config()
 
     payload = {
         "model": MODEL,
@@ -207,7 +202,6 @@ def ask_ollama(question):
 
     try:
         result = response.json()
-
     except ValueError as exc:
         raise RuntimeError(
             "Ollama trả về JSON không hợp lệ."
@@ -215,7 +209,7 @@ def ask_ollama(question):
 
     if not isinstance(result, dict):
         raise RuntimeError(
-            "Dữ liệu trả về từ Ollama không hợp lệ."
+            "Dữ liệu Ollama trả về không hợp lệ."
         )
 
     message = result.get("message", {})
@@ -241,9 +235,9 @@ def ask_ollama(question):
     return answer
 
 
-# =====================================================
+# =========================
 # TRANG CHỦ
-# =====================================================
+# =========================
 
 @app.get("/")
 def home():
@@ -252,7 +246,7 @@ def home():
 
     if not index_file.is_file():
         return jsonify({
-            "error": "Không tìm thấy index.html ở thư mục gốc."
+            "error": "Không tìm thấy index.html."
         }), 404
 
     return send_from_directory(
@@ -261,9 +255,9 @@ def home():
     )
 
 
-# =====================================================
+# =========================
 # KIỂM TRA KẾT NỐI
-# =====================================================
+# =========================
 
 @app.get("/api/health")
 def health():
@@ -274,32 +268,25 @@ def health():
         "OLLAMA_MODEL": bool(MODEL),
     }
 
-    missing = [
-        key for key, value in config.items()
-        if not value
-    ]
-
-    if missing:
-        return jsonify({
-            "server": "ok",
-            "ollama": "unavailable",
-            "model": MODEL,
-            "configuration": config,
-            "error": "Thiếu cấu hình: " + ", ".join(missing),
-        })
-
     try:
+
+        check_config()
 
         response = ollama_request(
             "/api/tags",
             timeout=15,
         )
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+
+        models = data.get("models", [])
 
         available_models = [
             item.get("name", "")
-            for item in data.get("models", [])
+            for item in models
             if isinstance(item, dict)
         ]
 
@@ -310,7 +297,6 @@ def health():
             "model_installed": MODEL in available_models,
             "available_models": available_models,
             "configuration": config,
-            "note": "Danh sách tags không nhất thiết thể hiện đầy đủ model Cloud."
         })
 
     except Exception as exc:
@@ -329,9 +315,9 @@ def health():
         })
 
 
-# =====================================================
+# =========================
 # CHAT
-# =====================================================
+# =========================
 
 @app.post("/api/chat")
 def chat():
@@ -362,15 +348,15 @@ def chat():
         )
 
         return jsonify({
-            "answer": "Nova chưa kết nối hoặc nhận được phản hồi từ Ollama.",
+            "answer": "Nova chưa kết nối được với AI.",
             "detail": str(exc),
             "error_type": type(exc).__name__,
         }), 502
 
 
-# =====================================================
+# =========================
 # TƯ VẤN TỔ HỢP MÔN
-# =====================================================
+# =========================
 
 @app.post("/api/recommend")
 def recommend():
@@ -390,7 +376,6 @@ def recommend():
     ).strip()
 
     ratings = data.get("ratings", {})
-
     combinations = data.get(
         "available_combinations",
         {}
@@ -440,15 +425,15 @@ Yêu cầu:
         )
 
         return jsonify({
-            "answer": "Nova chưa tạo được gợi ý từ Ollama.",
+            "answer": "Nova chưa tạo được gợi ý từ AI.",
             "detail": str(exc),
             "error_type": type(exc).__name__,
         }), 502
 
 
-# =====================================================
+# =========================
 # CHẠY LOCAL
-# =====================================================
+# =========================
 
 if __name__ == "__main__":
 
@@ -464,12 +449,9 @@ if __name__ == "__main__":
     print("       NOVA AI ĐANG CHẠY")
     print("================================")
     print(f"Website: {url}")
-    print(f"Ollama URL: {OLLAMA_URL}")
-    print(f"Model: {MODEL}")
-    print(
-        "API Key:",
-        "Đã cấu hình" if OLLAMA_API_KEY else "Chưa cấu hình"
-    )
+    print(f"Ollama URL: {'Đã cấu hình' if OLLAMA_URL else 'Thiếu'}")
+    print(f"Model: {'Đã cấu hình' if MODEL else 'Thiếu'}")
+    print(f"API Key: {'Đã cấu hình' if OLLAMA_API_KEY else 'Thiếu'}")
     print("================================\n")
 
     webbrowser.open(url)
