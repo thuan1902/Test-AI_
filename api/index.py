@@ -30,7 +30,7 @@ OLLAMA_URL = os.getenv(
 
 OLLAMA_API_KEY = os.getenv(
     "OLLAMA_API_KEY",
-    "",
+    "c44a8ec1a4bf490ca2b03ba5f4ad4340.mcqJvL59HenHWaascSvaZNU4",
 ).strip()
 
 MODEL = os.getenv(
