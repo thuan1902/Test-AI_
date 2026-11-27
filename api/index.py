@@ -22,7 +22,7 @@ load_dotenv(
 
 OLLAMA_URL = os.getenv(
     "OLLAMA_URL",
-    "https://ollama.com",
+    "https://your-ollama-server.com",
 ).rstrip("/")
 
 MODEL = os.getenv(
