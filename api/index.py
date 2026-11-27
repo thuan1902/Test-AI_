@@ -121,10 +121,7 @@ def request_ollama_chat(messages):
 
         if status == 401:
             raise RuntimeError(
-                "Ollama trả về HTTP 401 Unauthorized. Backend đã nhận request "
-                "nhưng Ollama không chấp nhận API key. Hãy kiểm tra key được tạo "
-                "từ Ollama API Keys, biến OLLAMA_API_KEY trên đúng Environment "
-                "của Vercel và deployment mới nhất."
+                "NOVA_TUNNEL_AUTH_FAILED: kiểm tra token giữa Vercel và proxy local."
             ) from exc
 
         if status == 403:
