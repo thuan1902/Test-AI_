@@ -27,7 +27,7 @@ OLLAMA_URL = os.getenv(
 
 MODEL = os.getenv(
     "OLLAMA_MODEL",
-    "qwen2.5:3b",
+    "deepseek-v4.1-flash",
 ).strip()
 
 REQUEST_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
