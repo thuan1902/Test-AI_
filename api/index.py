@@ -56,28 +56,23 @@ def is_ollama_cloud():
     return host == "ollama.com" or host.endswith(".ollama.com")
 
 
+
 def ollama_headers():
     """
-    Tạo header cho Ollama.
-    Ollama Cloud yêu cầu API key. Với Ollama tự host, có thể không cần key.
+    Tạo header xác thực cho Ollama local qua Cloudflare Tunnel.
     """
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
 
-    if OLLAMA_API_KEY:
-        # Không yêu cầu người dùng ghi sẵn chữ Bearer trong biến môi trường.
-        token = OLLAMA_API_KEY
+    token = os.environ.get("NOVA_TUNNEL_TOKEN", "").strip()
+
+    if token:
         if token.lower().startswith("bearer "):
             token = token[7:].strip()
-        headers["Authorization"] = f"Bearer {token}"
 
-    elif is_ollama_cloud():
-        raise RuntimeError(
-            "Thiếu OLLAMA_API_KEY. Hãy thêm biến này trong Vercel "
-            "Project Settings > Environment Variables."
-        )
+        headers["Authorization"] = f"Bearer {token}"
 
     return headers
 
